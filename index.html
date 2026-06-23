@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>STOCK SIGNAL</title>
+<title>STOCK SIGNAL<title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -178,7 +178,7 @@
   </div>
 
   <footer>
-    실시간 조회는 공개 CORS 프록시를 거쳐 네이버금융 일별시세를 가져오며, 사내망·브라우저 정책에 따라 차단될 수 있습니다 — 그 경우 위 "기준값 설정"을 펼쳐 데이터를 직접 붙여넣어 주세요. 등록한 종목 목록은 새로고침하면 초기화됩니다(브라우저에 저장하지 않음).<br>
+    실시간 조회는 공개 CORS 프록시를 거쳐 네이버금융 데이터를 가져오며, 사내망·브라우저 정책에 따라 차단될 수 있습니다 — 그 경우 위 "기준값 설정"을 펼쳐 데이터를 직접 붙여넣어 주세요. 등록한 종목 목록은 새로고침하면 초기화됩니다(브라우저에 저장하지 않음).<br>
     본 도구는 거래량·가격 패턴 기반의 기계적 보조 지표이며 투자 자문이 아닙니다. 최종 투자 판단과 책임은 본인에게 있습니다.
   </footer>
 </div>
@@ -242,6 +242,28 @@ function extractRows(rawText){
   const seen = new Set(); const out=[];
   for (const r of rows){ if(!seen.has(r.date) && r.open>0){ seen.add(r.date); out.push(r); } }
   return out;
+}
+
+// 종목코드 -> 종목명 조회 (실패해도 조용히 무시 — 이름 없이 코드만 표시됨)
+async function fetchStockName(code){
+  const url = `https://api.stock.naver.com/stock/${code}/basic`;
+  const attempts = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  ];
+  for (const p of attempts){
+    try{
+      const res = await fetch(p, {cache:'no-store'});
+      if(!res.ok) continue;
+      const text = await res.text();
+      const m = text.match(/"stockName"\s*:\s*"([^"]+)"/)
+             || text.match(/"itemName"\s*:\s*"([^"]+)"/)
+             || text.match(/"korName"\s*:\s*"([^"]+)"/)
+             || text.match(/"name"\s*:\s*"([^"]+)"/);
+      if (m && m[1]) return m[1];
+    }catch(e){ /* try next */ }
+  }
+  return null;
 }
 
 async function fetchNaver(code, ownProxyBase){
@@ -319,6 +341,14 @@ function addCode(){
   renderChips();
   renderGrid();
   setStatus(`${code} 추가됨 — [전체 조회]를 눌러 데이터를 가져오세요.`);
+  fetchStockName(code).then(name=>{
+    if (name && store[code]){
+      store[code].name = name;
+      renderChips();
+      renderGrid();
+      if (selectedCode === code) updateDetailTitle();
+    }
+  });
 }
 function removeCode(code){
   watchlist = watchlist.filter(c=>c!==code);
@@ -336,7 +366,10 @@ function renderChips(){
     return;
   }
   els.chipsRow.className = 'chips';
-  els.chipsRow.innerHTML = watchlist.map(c=>`<span class="chip">${c}<button data-code="${c}" class="rm" type="button">×</button></span>`).join('');
+  els.chipsRow.innerHTML = watchlist.map(c=>{
+    const nm = store[c] && store[c].name ? ` <span style="color:var(--muted);">· ${store[c].name}</span>` : '';
+    return `<span class="chip">${c}${nm}<button data-code="${c}" class="rm" type="button">×</button></span>`;
+  }).join('');
   els.chipsRow.querySelectorAll('.rm').forEach(b=> b.addEventListener('click', ()=> removeCode(b.dataset.code)));
   els.pasteCodeSelect.innerHTML = watchlist.map(c=>`<option value="${c}">${c}</option>`).join('');
 }
@@ -348,17 +381,17 @@ async function fetchAll(){
   const p = getParams();
   let okCount = 0, errCount = 0;
   for (const code of watchlist){
-    store[code] = { status:'loading' };
+    store[code] = { ...store[code], status:'loading' };
     renderGrid();
     setStatus(`조회 중... (${code})`);
     try{
       const raw = await fetchNaver(code, ownProxy);
       const computed = computeSignals(raw, p);
       const display = filterDisplay(computed, els.period.value);
-      store[code] = { status:'done', computed, display };
+      store[code] = { ...store[code], status:'done', computed, display };
       okCount++;
     }catch(e){
-      store[code] = { status:'error', error: e.message };
+      store[code] = { ...store[code], status:'error', error: e.message };
       errCount++;
     }
     renderGrid();
@@ -376,7 +409,7 @@ function runPaste(){
   const p = getParams();
   const computed = computeSignals(raw, p);
   const display = filterDisplay(computed, els.period.value);
-  store[code] = { status:'done', computed, display: display.length?display:computed.slice(-60) };
+  store[code] = { ...store[code], status:'done', display: display.length?display:computed.slice(-60), computed };
   renderGrid();
   renderTicker();
   if (selectedCode === code) selectDetail(code);
@@ -415,7 +448,7 @@ function renderGrid(){
     const sel = selectedCode===code ? ' selected' : '';
     return `<div class="stock-card ${info.cls}${sel}" data-code="${code}">
       <div class="topline">
-        <span class="code">${code}</span>
+        <span class="code">${code}${entry && entry.name ? ' · '+entry.name : ''}</span>
         <button class="removeX" data-code="${code}" type="button" title="삭제">×</button>
       </div>
       <div class="close mono">${closeTxt}</div>
@@ -432,13 +465,19 @@ function renderGrid(){
   });
 }
 
+function updateDetailTitle(){
+  const entry = store[selectedCode];
+  const nm = entry && entry.name ? ` (${entry.name})` : '';
+  els.detailTitle.textContent = `${selectedCode}${nm} — 일별 신호 내역`;
+}
+
 function selectDetail(code){
   const entry = store[code];
   if (!entry || entry.status!=='done'){ setStatus(`${code}는 아직 데이터가 없습니다. 전체 조회를 먼저 실행해주세요.`, 'err'); return; }
   selectedCode = code;
   renderGrid();
   els.detailPanel.style.display = '';
-  els.detailTitle.textContent = `${code} — 일별 신호 내역`;
+  updateDetailTitle();
   const cols = ['날짜','시가','고가','저가','종가','거래량','거래량비율','매수','매도'];
   els.tableHead.innerHTML = cols.map(c=>`<th>${c}</th>`).join('');
   els.tableBody.innerHTML = entry.display.slice().reverse().map(r=>{
@@ -468,7 +507,8 @@ function renderTicker(){
   els.ticker.innerHTML = doneEntries.map(({code, entry})=>{
     const last = entry.computed[entry.computed.length-1];
     const sig = last.buy ? ' <span class="buyTxt">[매수]</span>' : (last.sell ? ' <span class="sellTxt">[매도]</span>' : '');
-    return `<span>${code} <b>${Math.round(last.close).toLocaleString()}</b>${sig}</span>`;
+    const nm = entry.name ? ` ${entry.name}` : '';
+    return `<span>${code}${nm} <b>${Math.round(last.close).toLocaleString()}</b>${sig}</span>`;
   }).join('');
 }
 
