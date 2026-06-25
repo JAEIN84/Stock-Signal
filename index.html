@@ -218,8 +218,8 @@ const els = {
   ticker: document.getElementById('tickerStrip'),
 };
 
-let watchlist = [];           // ["446770", "005930", ...]
-const store = {};             // code -> {status, computed, display, error}
+let watchlist = [];
+const store = {};
 let selectedCode = null;
 
 els.settingsBtn.addEventListener('click', () => { els.settingsDetails.open = !els.settingsDetails.open; });
@@ -346,6 +346,8 @@ function computeSignals(rows, p){
     const weakCandle   = candlePos!=null && candlePos <= p.weak;
     r.buy1 = !!(breakout && bullish && volSpike);
     r.buy2 = !!(nearLow && volSpike && strongCandle);
+    r.sell1 = !!(breakdown && bearish && volSpike);
+    r.sell2 = !!(nearHigh && volSpike && weakCandle);
 
     r.trendRefClose = i>=p.trendN ? out[i-p.trendN].close : null;
     r.trendPct = r.trendRefClose ? (r.close - r.trendRefClose) / r.trendRefClose : null;
@@ -369,10 +371,30 @@ function computeSignals(rows, p){
     r.buy4 = crossUp;
     r.sell4 = crossDown;
 
-    r.buy  = r.buy1 || r.buy2 || r.buy3 || r.buy4;
-    r.sell1 = !!(breakdown && bearish && volSpike);
-    r.sell2 = !!(nearHigh && volSpike && weakCandle);
-    r.sell  = r.sell1 || r.sell2 || r.sell3 || r.sell4;
+    const isCandleBuy  = r.buy1 || r.buy2;
+    const isCandleSell = r.sell1 || r.sell2;
+    const isTrendBuy   = r.buy3 || r.buy4;
+    const isTrendSell  = r.sell3 || r.sell4;
+    const anyBuy  = isCandleBuy || isTrendBuy;
+    const anySell = isCandleSell || isTrendSell;
+    r.conflict = anyBuy && anySell;
+    r.tier = null;
+
+    if (isCandleBuy && isCandleSell){
+      r.buy = false; r.sell = false; r.tier = 'candle-conflict';
+    } else if (isCandleBuy){
+      r.buy = true; r.sell = false; r.tier = 'candle';
+    } else if (isCandleSell){
+      r.buy = false; r.sell = true; r.tier = 'candle';
+    } else if (isTrendBuy && isTrendSell){
+      r.buy = false; r.sell = false; r.tier = 'trend-conflict';
+    } else if (isTrendBuy){
+      r.buy = true; r.sell = false; r.tier = 'trend';
+    } else if (isTrendSell){
+      r.buy = false; r.sell = true; r.tier = 'trend';
+    } else {
+      r.buy = false; r.sell = false; r.tier = 'none';
+    }
   }
   return out;
 }
@@ -477,13 +499,17 @@ function badgeInfo(entry){
   if (entry.status==='loading') return {cls:'', label:'조회 중...', reason:''};
   if (entry.status==='error') return {cls:'', label:'조회 실패', reason: entry.error || ''};
   const last = entry.computed[entry.computed.length-1];
+  const conflictTag = last.conflict ? ' ⚠ 충돌(반대신호 동시발생)' : '';
   if (last.buy){
     const reasons = [last.buy1&&'돌파형', last.buy2&&'투매반등형', last.buy3&&'추세상승형', last.buy4&&'골든크로스'].filter(Boolean).join(' · ');
-    return {cls:'buy', label:'매수 신호 ON', reason: reasons + ' · ' + toDisplayDate(last.date)};
+    return {cls:'buy', label:'매수 우선'+(last.conflict?' (매도신호 동시발생)':''), reason: reasons + conflictTag + ' · ' + toDisplayDate(last.date)};
   }
   if (last.sell){
     const reasons = [last.sell1&&'붕괴형', last.sell2&&'고점분배형', last.sell3&&'추세이탈형', last.sell4&&'데드크로스'].filter(Boolean).join(' · ');
-    return {cls:'sell', label:'매도 신호 ON', reason: reasons + ' · ' + toDisplayDate(last.date)};
+    return {cls:'sell', label:'매도 우선'+(last.conflict?' (매수신호 동시발생)':''), reason: reasons + conflictTag + ' · ' + toDisplayDate(last.date)};
+  }
+  if (last.tier==='candle-conflict' || last.tier==='trend-conflict'){
+    return {cls:'', label:'신호 충돌 (판정보류)', reason: '같은 우선순위에서 매수·매도가 동시에 발생해 보류됨 · ' + toDisplayDate(last.date)};
   }
   return {cls:'', label:'신호 없음 (대기)', reason: toDisplayDate(last.date) + ' 종가 기준'};
 }
@@ -539,7 +565,9 @@ function buildChartSVG(rows){
   const markers = pts.filter(p=> p.r.buy || p.r.sell).map(p=>{
     const color = p.r.buy ? '#2BD576' : '#FF5470';
     const label = p.r.buy ? '매수' : '매도';
-    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${color}" stroke="#0B1220" stroke-width="1.4"><title>${toDisplayDate(p.r.date)} · ${Math.round(p.r.close).toLocaleString()} · ${label}</title></circle>`;
+    const ring = p.r.conflict ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="7" fill="none" stroke="#F2B84B" stroke-width="1.5"></circle>` : '';
+    const tag = p.r.conflict ? ' (충돌)' : '';
+    return `${ring}<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${color}" stroke="#0B1220" stroke-width="1.4"><title>${toDisplayDate(p.r.date)} · ${Math.round(p.r.close).toLocaleString()} · ${label}${tag}</title></circle>`;
   }).join('');
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:160px;display:block;">
     <path d="${area}" fill="rgba(242,184,75,0.10)" stroke="none"></path>
@@ -560,6 +588,7 @@ function renderChart(rows){
       <span style="color:${chgColor};font-weight:600;">${chg>=0?'+':''}${Math.round(chg).toLocaleString()} (${chgPct.toFixed(1)}%)</span>
       <span><i style="background:#2BD576;"></i>매수신호일</span>
       <span><i style="background:#FF5470;"></i>매도신호일</span>
+      <span><i style="background:transparent;border:1.5px solid #F2B84B;"></i>충돌일(반대신호 동시발생)</span>
     </div>`;
 }
 
@@ -574,8 +603,9 @@ function selectDetail(code){
   const cols = ['날짜','시가','고가','저가','종가','거래량','거래량비율','매수','매도'];
   els.tableHead.innerHTML = cols.map(c=>`<th>${c}</th>`).join('');
   els.tableBody.innerHTML = entry.display.slice().reverse().map(r=>{
-    const buyPill = r.buy ? `<span class="pill buy">매수</span>` : `<span class="pill none">-</span>`;
-    const sellPill = r.sell ? `<span class="pill sell">매도</span>` : `<span class="pill none">-</span>`;
+    const conflictBadge = r.conflict ? ` <span title="반대 신호 동시발생" style="color:var(--amber);">⚠</span>` : '';
+    const buyPill = r.buy ? `<span class="pill buy">매수${conflictBadge}</span>` : `<span class="pill none">-</span>`;
+    const sellPill = r.sell ? `<span class="pill sell">매도${conflictBadge}</span>` : `<span class="pill none">-</span>`;
     return `<tr>
       <td>${toDisplayDate(r.date)}</td>
       <td>${Math.round(r.open).toLocaleString()}</td>
