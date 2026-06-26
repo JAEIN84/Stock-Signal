@@ -99,6 +99,24 @@
   .chart-legend{display:flex;gap:16px;font-size:11.5px;color:var(--muted);margin-top:6px;}
   .chart-legend span{display:inline-flex;align-items:center;gap:5px;}
   .chart-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;}
+
+  /* === 추가: 백테스트 패널 / 설정 초기화 링크 === */
+  .reset-link{font-size:11.5px;color:var(--muted);text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;margin-top:4px;}
+  .reset-link:hover{color:var(--sell);}
+  .bt-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:6px;}
+  .bt-card{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .bt-card .lbl{font-size:11.5px;color:var(--muted);}
+  .bt-card .val{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700;margin-top:4px;}
+  .bt-card .val.pos{color:var(--buy);}
+  .bt-card .val.neg{color:var(--sell);}
+  .bt-note{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.6;}
+
+  .tabbar{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line);}
+  .tabbar button{background:none;border:none;color:var(--muted);font-size:14px;font-weight:600;padding:10px 16px;cursor:pointer;border-bottom:2px solid transparent;border-radius:0;}
+  .tabbar button:hover{color:var(--text);}
+  .tabbar button.active{color:var(--amber);border-bottom-color:var(--amber);}
+  .page-section{display:none;}
+  .page-section.active{display:block;}
 </style>
 </head>
 <body>
@@ -112,11 +130,18 @@
     <p>여러 종목코드를 등록해두면 한 화면에서 종목별 매수·매도 신호를 한눈에 비교할 수 있습니다. 카드를 클릭하면 해당 종목의 일별 내역이 아래에 펼쳐집니다.</p>
   </header>
 
+  <div class="tabbar" role="tablist">
+    <button type="button" class="active" id="tabBtn1" data-page="1" role="tab" aria-selected="true">① 종목코드 추가 / 종목현황</button>
+    <button type="button" id="tabBtn2" data-page="2" role="tab" aria-selected="false">② 전종목 자동스캔</button>
+    <button type="button" id="tabBtn3" data-page="3" role="tab" aria-selected="false">③ 백테스트</button>
+  </div>
+
+  <div class="page-section active" id="page1">
   <div class="panel">
     <div class="controls">
       <div class="field">
         <label for="codeInput">종목코드 추가 (6자리, 영문/숫자)</label>
-        <input type="text" id="codeInput" placeholder="예: 446770, Q500A1" maxlength="6">
+        <input type="text" id="codeInput" placeholder="예: 446770, 0190Y0" maxlength="6">
       </div>
       <button class="secondary" id="addBtn" type="button">+ 추가</button>
       <div class="field">
@@ -152,9 +177,14 @@
         <div class="field"><label>이동평균1 기간(일)</label><input type="text" id="p_ma1" value="60"></div>
         <div class="field"><label>이동평균2 기간(일)</label><input type="text" id="p_ma2" value="120"></div>
         <div class="field" style="grid-column:1/-1;">
-          <label>프록시 서버 URL (선택 — 직접 배포한 서버리스 프록시가 있다면 입력)</label>
-          <input type="text" id="p_proxy" style="width:100%;" placeholder="예: https://내프로젝트.vercel.app/api/stock">
+          <label>프록시 서버 URL (개별 종목 조회는 선택, 전종목 스캔은 필수)</label>
+          <input type="text" id="p_proxy" style="width:100%;" placeholder="예: https://내워커.workers.dev (Cloudflare Worker — ②전종목 자동스캔 탭에는 반드시 필요합니다)">
         </div>
+      </div>
+      <!-- 추가: 설정/관심종목 저장 안내 + 초기화 -->
+      <div style="margin-top:10px;">
+        <span style="font-size:11.5px;color:var(--muted);">설정값과 관심종목은 이 브라우저에 자동 저장됩니다. </span>
+        <button class="reset-link" id="resetAllBtn" type="button">저장된 설정/관심종목 초기화</button>
       </div>
       <div class="paste-area">
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">실시간 조회가 막힐 경우 — 아래에서 종목을 고른 뒤, 네이버금융 일별시세 원본 데이터를 붙여넣고 계산하세요</label>
@@ -187,9 +217,67 @@
       </table>
     </div>
   </div>
+  </div>
+  <!-- /page1 -->
+
+  <div class="page-section" id="page2">
+  <!-- 전종목 자동 스캔 패널 -->
+  <div class="panel" id="scanPanel">
+    <h3 style="margin-bottom:4px;font-size:15px;">전종목 자동 스캔 (베타)</h3>
+    <div class="bt-note">코스피·코스닥 시가총액 상위 종목들을 ①탭의 "기준값 설정"에 등록된 조건으로 일괄 검사해 매수·매도 신호가 발생한 종목만 찾아줍니다. 네이버금융 비공식 API에 대량 요청을 보내는 기능이라 <b>본인 전용 프록시(Cloudflare Worker) URL이 반드시 필요</b>하며, 범위가 클수록 오래 걸립니다.</div>
+    <div class="controls" style="margin:14px 0;">
+      <div class="field"><label>시장</label>
+        <select id="scan_market">
+          <option value="both" selected>코스피+코스닥</option>
+          <option value="kospi">코스피만</option>
+          <option value="kosdaq">코스닥만</option>
+        </select>
+      </div>
+      <div class="field"><label>스캔 범위(시가총액 상위)</label>
+        <select id="scan_limit">
+          <option value="100">상위 100종목</option>
+          <option value="300" selected>상위 300종목</option>
+          <option value="800">상위 800종목</option>
+          <option value="0">전종목(약 2,500개 — 매우 느림, 비추천)</option>
+        </select>
+      </div>
+      <div class="field"><label>동시 요청 수</label><input type="text" id="scan_concurrency" value="5" style="width:70px;"></div>
+      <button id="scanStartBtn" type="button">스캔 시작</button>
+      <button class="secondary" id="scanStopBtn" type="button" style="display:none;">중단</button>
+    </div>
+    <div class="status-line" id="scanStatus"></div>
+    <div class="stocks-grid" id="scanResultsGrid" style="margin-top:10px;"></div>
+  </div>
+  </div>
+  <!-- /page2 -->
+
+  <div class="page-section" id="page3">
+  <!-- 백테스트 패널 -->
+  <div class="panel" id="backtestPanel">
+    <h3 style="margin-bottom:4px;font-size:15px;">백테스트 — 신호 발생 후 N거래일 수익률</h3>
+    <div class="bt-note">①탭에서 조회한 종목 중 하나를 선택하면, 그 종목의 전체 조회 기간(최대 약 240거래일) 동안 발생한 매수·매도 신호 각각에 대해 신호 발생일 종가 → N거래일 후 종가의 변화율을 계산합니다. 매도신호는 "신호 후 가격이 실제로 하락했는지"를 승률 기준으로 봅니다.</div>
+    <div class="controls" style="margin:14px 0;">
+      <div class="field"><label>백테스트할 종목</label>
+        <select id="bt_code_select" style="width:220px;"></select>
+      </div>
+      <div class="field"><label>보유일수(거래일)</label><input type="text" id="p_hold" value="5" style="width:90px;"></div>
+      <button class="secondary" id="runBacktestBtn" type="button">백테스트 실행</button>
+    </div>
+    <div class="bt-summary-grid" id="backtestSummary"></div>
+    <div class="table-scroll" style="margin-top:14px;max-height:280px;">
+      <table>
+        <thead><tr><th>신호일</th><th>유형</th><th>신호가</th><th>N일후가</th><th>N일후날짜</th><th>수익률</th></tr></thead>
+        <tbody id="backtestBody"></tbody>
+      </table>
+    </div>
+  </div>
+  </div>
+  <!-- /page3 -->
 
   <footer>
-    실시간 조회는 공개 CORS 프록시를 거쳐 네이버금융 일별시세를 가져오며, 사내망·브라우저 정책에 따라 차단될 수 있습니다 — 그 경우 위 "기준값 설정"을 펼쳐 데이터를 직접 붙여넣어 주세요. 등록한 종목 목록은 새로고침하면 초기화됩니다(브라우저에 저장하지 않음).<br>
+    실시간 조회는 공개 CORS 프록시를 거쳐 네이버금융 일별시세를 가져오며, 사내망·브라우저 정책에 따라 차단될 수 있습니다 — 그 경우 위 "기준값 설정"을 펼쳐 데이터를 직접 붙여넣거나, 직접 배포한 프록시 서버 URL을 입력해주세요.<br>
+    관심종목 목록과 기준값 설정은 이 브라우저(localStorage)에 저장되어 새로고침 후에도 유지됩니다. 다른 기기·브라우저에는 동기화되지 않으며, 서버로 전송되지 않습니다.<br>
+    전종목 스캔은 네이버금융의 비공식 API를 대량으로 호출하는 기능으로, 해당 API의 구조가 바뀌면 동작하지 않을 수 있으며 과도한 사용은 차단으로 이어질 수 있습니다.<br>
     본 도구는 거래량·가격 패턴 기반의 기계적 보조 지표이며 투자 자문이 아닙니다. 최종 투자 판단과 책임은 본인에게 있습니다.
   </footer>
 </div>
@@ -216,6 +304,20 @@ const els = {
   tableHead: document.getElementById('tableHead'),
   tableBody: document.getElementById('tableBody'),
   ticker: document.getElementById('tickerStrip'),
+  // 추가: 백테스트 / 리셋 관련
+  backtestPanel: document.getElementById('backtestPanel'),
+  backtestSummary: document.getElementById('backtestSummary'),
+  backtestBody: document.getElementById('backtestBody'),
+  runBacktestBtn: document.getElementById('runBacktestBtn'),
+  resetAllBtn: document.getElementById('resetAllBtn'),
+  // 추가: 전종목 스캔
+  scanStartBtn: document.getElementById('scanStartBtn'),
+  scanStopBtn: document.getElementById('scanStopBtn'),
+  scanStatus: document.getElementById('scanStatus'),
+  scanResultsGrid: document.getElementById('scanResultsGrid'),
+  tabBtns: [document.getElementById('tabBtn1'), document.getElementById('tabBtn2'), document.getElementById('tabBtn3')],
+  pages: [document.getElementById('page1'), document.getElementById('page2'), document.getElementById('page3')],
+  btCodeSelect: document.getElementById('bt_code_select'),
 };
 
 let watchlist = [];
@@ -292,9 +394,12 @@ async function fetchStockName(code){
   return null;
 }
 
-async function fetchNaver(code, ownProxyBase){
+async function fetchNaver(code, ownProxyBase, opts){
+  opts = opts || {};
+  const daysBack = opts.daysBack || 600; // 240거래일 표시 + 지표 warmup 버퍼 (스캔 시에는 더 짧게 지정 가능)
+  const requireOwnProxy = !!opts.requireOwnProxy; // 전종목 스캔 시 true — 공개 프록시 남용 방지
   const end = new Date();
-  const start = new Date(); start.setDate(start.getDate()-600);
+  const start = new Date(); start.setDate(start.getDate()-daysBack);
   const sParam = fmtDate(start), eParam = fmtDate(end);
   const naverUrl = `https://api.finance.naver.com/siseJson.naver?symbol=${code}&requestType=1&startTime=${sParam}&endTime=${eParam}&timeframe=day`;
   const attempts = [];
@@ -302,20 +407,21 @@ async function fetchNaver(code, ownProxyBase){
     const base = ownProxyBase.trim().replace(/\/$/, '');
     attempts.push(`${base}?symbol=${code}&startTime=${sParam}&endTime=${eParam}&timeframe=day`);
   }
-  attempts.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(naverUrl)}`);
-  attempts.push(`https://corsproxy.io/?url=${encodeURIComponent(naverUrl)}`);
-  attempts.push(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(naverUrl)}`);
+  if (!requireOwnProxy){
+    attempts.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(naverUrl)}`);
+    attempts.push(`https://corsproxy.io/?url=${encodeURIComponent(naverUrl)}`);
+    attempts.push(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(naverUrl)}`);
+  }
+  if (!attempts.length) throw new Error('프록시 URL이 설정되지 않았습니다.');
   let lastErr;
   for (const p of attempts){
     try{
       const res = await fetchWithTimeout(p, 12000);
+      if(!res.ok) throw new Error('HTTP '+res.status);
       const text = await res.text();
-      if(!res.ok){
-        throw new Error(`HTTP ${res.status} · 응답: ${text.slice(0,150).replace(/\s+/g,' ')}`);
-      }
       const rows = extractRows(text);
       if (rows.length > 5) return rows;
-      lastErr = new Error(`데이터 파싱 실패(${rows.length}행) · 응답: ${text.slice(0,150).replace(/\s+/g,' ') || '(빈 응답)'}`);
+      lastErr = new Error('데이터가 비어있음');
     } catch(e){
       lastErr = (e && e.name === 'AbortError') ? new Error('응답 시간 초과(프록시 지연)') : e;
     }
@@ -406,9 +512,69 @@ function filterDisplay(rows, periodMode){
   return rows.slice(-n);
 }
 
+/* ========================================================================
+   추가 1) localStorage 저장/복원
+   - 관심종목(코드+종목명)과 기준값 설정(파라미터+프록시URL+조회기준)을
+     브라우저에 저장해 새로고침해도 유지되도록 함
+   ======================================================================== */
+const LS_KEYS = { watchlist: 'stockSignal_watchlist_v1', settings: 'stockSignal_settings_v1' };
+const SETTING_IDS = ['p_n','p_mult','p_period','p_lowpct','p_candle','p_highpct','p_weak','p_trendn','p_trendpct','p_ma1','p_ma2','p_proxy','p_hold'];
+
+function saveWatchlist(){
+  try{
+    const data = watchlist.map(c => ({ code: c, name: (store[c] && store[c].name) || null }));
+    localStorage.setItem(LS_KEYS.watchlist, JSON.stringify(data));
+  }catch(e){ /* localStorage 미지원 환경 등은 조용히 무시 */ }
+}
+function loadWatchlist(){
+  try{
+    const raw = localStorage.getItem(LS_KEYS.watchlist);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function saveSettings(){
+  try{
+    const data = {};
+    SETTING_IDS.forEach(id=>{
+      const el = document.getElementById(id);
+      if (el) data[id] = el.value;
+    });
+    data.period = els.period.value;
+    localStorage.setItem(LS_KEYS.settings, JSON.stringify(data));
+  }catch(e){}
+}
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem(LS_KEYS.settings);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    SETTING_IDS.forEach(id=>{
+      if (data[id]!=null){
+        const el = document.getElementById(id);
+        if (el) el.value = data[id];
+      }
+    });
+    if (data.period) els.period.value = data.period;
+  }catch(e){}
+}
+function resetAllStorage(){
+  if (!confirm('저장된 관심종목과 기준값 설정을 모두 초기화할까요? 새로고침됩니다.')) return;
+  try{
+    localStorage.removeItem(LS_KEYS.watchlist);
+    localStorage.removeItem(LS_KEYS.settings);
+  }catch(e){}
+  location.reload();
+}
+els.resetAllBtn.addEventListener('click', resetAllStorage);
+SETTING_IDS.forEach(id=>{
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', saveSettings);
+});
+els.period.addEventListener('change', saveSettings);
+
 function addCode(){
   const code = els.codeInput.value.trim().toUpperCase();
-  if (!/^[0-9A-Z]{6}$/.test(code)){ setStatus('종목코드는 영문/숫자 조합 6자리로 입력해주세요. (예: 446770, Q500A1)', 'err'); return; }
+  if (!/^[0-9A-Z]{6}$/.test(code)){ setStatus('종목코드는 영문/숫자 조합 6자리로 입력해주세요. (예: 446770, 0190Y0)', 'err'); return; }
   if (watchlist.includes(code)){ setStatus(`${code}는 이미 등록되어 있습니다.`, 'err'); return; }
   watchlist.push(code);
   store[code] = { status:'idle' };
@@ -416,12 +582,14 @@ function addCode(){
   renderChips();
   renderGrid();
   setStatus(`${code} 추가됨 — [전체 조회]를 눌러 데이터를 가져오세요.`);
+  saveWatchlist(); // 추가: 저장
   fetchStockName(code).then(name=>{
     if (name && store[code]){
       store[code].name = name;
       renderChips();
       renderGrid();
       if (selectedCode === code) updateDetailTitle();
+      saveWatchlist(); // 추가: 종목명 갱신 후 저장
     }
   });
 }
@@ -432,6 +600,7 @@ function removeCode(code){
   renderChips();
   renderGrid();
   renderTicker();
+  saveWatchlist(); // 추가: 저장
 }
 function renderChips(){
   if (watchlist.length===0){
@@ -594,6 +763,274 @@ function renderChart(rows){
     </div>`;
 }
 
+/* ========================================================================
+   추가 2) 백테스트
+   - 선택 종목의 전체 보유 데이터(entry.computed, 최대 약 240거래일)에서
+     매수/매도 신호가 발생한 모든 날짜를 찾아, N거래일 후 종가 변화율을 계산
+   ======================================================================== */
+function runBacktest(entry, holdDays){
+  const rows = entry.computed;
+  const results = [];
+  for (let i=0;i<rows.length;i++){
+    const r = rows[i];
+    if (!r.buy && !r.sell) continue;
+    const targetIdx = i + holdDays;
+    if (targetIdx >= rows.length) continue; // 아직 N일이 지나지 않은 최근 신호는 제외
+    const future = rows[targetIdx];
+    const retPct = (future.close - r.close) / r.close * 100;
+    results.push({
+      date: r.date, type: r.buy ? '매수' : '매도',
+      entryClose: r.close, exitClose: future.close, exitDate: future.date,
+      retPct
+    });
+  }
+  return results;
+}
+function summarizeBacktest(results){
+  function stats(arr, winCond){
+    if (!arr.length) return null;
+    const avgRet = arr.reduce((a,b)=>a+b.retPct,0)/arr.length;
+    const wins = arr.filter(winCond).length;
+    return { count: arr.length, avg: avgRet, winRate: wins/arr.length*100 };
+  }
+  const buys = results.filter(x=>x.type==='매수');
+  const sells = results.filter(x=>x.type==='매도');
+  return {
+    buy: stats(buys, x=>x.retPct>0),               // 매수신호: 가격이 올랐으면 성공
+    sell: stats(sells, x=>x.retPct<0),              // 매도신호: 가격이 내렸으면(분배/이탈 적중) 성공
+  };
+}
+function renderBacktestSummaryCard(label, s){
+  if (!s) return `<div class="bt-card"><div class="lbl">${label}</div><div class="val" style="color:var(--muted);font-size:13px;">신호 없음(또는 보유일수 미충족)</div></div>`;
+  const valCls = s.avg > 0 ? 'pos' : (s.avg < 0 ? 'neg' : '');
+  return `<div class="bt-card">
+    <div class="lbl">${label} · ${s.count}건</div>
+    <div class="val ${valCls}">${s.avg>=0?'+':''}${s.avg.toFixed(2)}%</div>
+    <div class="lbl" style="margin-top:4px;">승률 ${s.winRate.toFixed(0)}%</div>
+  </div>`;
+}
+function populateBacktestSelect(){
+  const doneList = watchlist.filter(c => store[c] && store[c].status === 'done');
+  const prevVal = els.btCodeSelect.value;
+  if (doneList.length === 0){
+    els.btCodeSelect.innerHTML = '<option value="">조회된 종목 없음 — ①탭에서 먼저 전체 조회</option>';
+    els.backtestSummary.innerHTML = '';
+    els.backtestBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px 0;">①탭에서 종목을 추가하고 [전체 조회]를 실행한 뒤 다시 와주세요.</td></tr>`;
+    return;
+  }
+  els.btCodeSelect.innerHTML = doneList.map(c=>{
+    const nm = store[c].name ? ` · ${store[c].name}` : '';
+    return `<option value="${c}">${c}${nm}</option>`;
+  }).join('');
+  if (doneList.includes(selectedCode)) els.btCodeSelect.value = selectedCode;
+  else if (doneList.includes(prevVal)) els.btCodeSelect.value = prevVal;
+}
+function refreshBacktest(){
+  const code = els.btCodeSelect.value;
+  if (!code) return;
+  const entry = store[code];
+  if (!entry || entry.status!=='done') return;
+  const hold = Math.max(1, parseInt(document.getElementById('p_hold').value) || 5);
+  const results = runBacktest(entry, hold);
+  const summary = summarizeBacktest(results);
+  els.backtestSummary.innerHTML =
+    renderBacktestSummaryCard(`매수신호 → ${hold}거래일 후`, summary.buy) +
+    renderBacktestSummaryCard(`매도신호 → ${hold}거래일 후`, summary.sell);
+  const sorted = results.slice().sort((a,b)=> b.date.localeCompare(a.date));
+  els.backtestBody.innerHTML = sorted.map(x=>{
+    const pillCls = x.type==='매수' ? 'buy' : 'sell';
+    const retCls = x.retPct>0 ? 'pos' : (x.retPct<0 ? 'neg' : '');
+    const retColor = x.retPct>0 ? 'var(--buy)' : (x.retPct<0 ? 'var(--sell)' : 'var(--muted)');
+    return `<tr>
+      <td>${toDisplayDate(x.date)}</td>
+      <td><span class="pill ${pillCls}">${x.type}</span></td>
+      <td>${Math.round(x.entryClose).toLocaleString()}</td>
+      <td>${Math.round(x.exitClose).toLocaleString()}</td>
+      <td>${toDisplayDate(x.exitDate)}</td>
+      <td style="color:${retColor};font-weight:600;">${x.retPct>=0?'+':''}${x.retPct.toFixed(2)}%</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px 0;">해당 보유일수로 평가 가능한 신호가 없습니다. 조회기간을 늘리거나 보유일수를 줄여보세요.</td></tr>`;
+}
+els.runBacktestBtn.addEventListener('click', refreshBacktest);
+els.btCodeSelect.addEventListener('change', refreshBacktest);
+document.getElementById('p_hold').addEventListener('change', saveSettings);
+
+/* ========================================================================
+   탭(페이지) 전환 — 클릭한 탭만 보이고 나머지는 숨김
+   ======================================================================== */
+function showPage(n){
+  els.pages.forEach((el, i)=> el.classList.toggle('active', i === n-1));
+  els.tabBtns.forEach((btn, i)=>{
+    const active = i === n-1;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  if (n === 3){ populateBacktestSelect(); refreshBacktest(); }
+}
+els.tabBtns.forEach((btn, i)=> btn.addEventListener('click', ()=> showPage(i+1)));
+
+
+/* ========================================================================
+   추가 3) 전종목 자동 스캔
+   - m.stock.naver.com의 시가총액순 종목 리스트 API를 자체 프록시(Worker)로
+     경유해 코스피/코스닥 종목 목록(코드+이름)을 페이지 단위로 수집한 뒤,
+     각 종목의 최근 일별시세를 받아 동일한 computeSignals()로 신호를 계산합니다.
+   - 네이버 비공식 API 스키마는 변경될 수 있어, extractUniverseRows()는
+     여러 필드명 패턴을 함께 시도하는 방어적 정규식 파싱을 사용합니다.
+   ======================================================================== */
+function sleep(ms){ return new Promise(r=> setTimeout(r, ms)); }
+
+function extractUniverseRows(jsonText){
+  const rows = [];
+  const re1 = /"(?:itemCode|symbolCode|code)"\s*:\s*"([0-9A-Za-z]{6})"[^}]{0,300}?"(?:stockName|itemName|name|korName)"\s*:\s*"([^"]+)"/g;
+  let m;
+  while ((m = re1.exec(jsonText)) !== null) rows.push({ code:m[1].toUpperCase(), name:m[2] });
+  if (rows.length === 0){
+    const re2 = /"(?:stockName|itemName|name|korName)"\s*:\s*"([^"]+)"[^}]{0,300}?"(?:itemCode|symbolCode|code)"\s*:\s*"([0-9A-Za-z]{6})"/g;
+    while ((m = re2.exec(jsonText)) !== null) rows.push({ code:m[2].toUpperCase(), name:m[1] });
+  }
+  // 중복 제거(같은 코드가 여러 번 매칭될 수 있음)
+  const seen = new Set(); const out = [];
+  for (const r of rows){ if (!seen.has(r.code)){ seen.add(r.code); out.push(r); } }
+  return out;
+}
+
+async function fetchListPage(market, page, proxyBase){
+  const base = proxyBase.trim().replace(/\/$/, '');
+  const url = `${base}?mode=list&market=${market}&page=${page}&pageSize=50`;
+  const res = await fetchWithTimeout(url, 12000);
+  if (!res.ok) throw new Error('HTTP '+res.status);
+  const text = await res.text();
+  return extractUniverseRows(text);
+}
+
+async function buildUniverse(markets, limit, proxyBase, onProgress, signal){
+  const all = [];
+  for (const market of markets){
+    let page = 1;
+    while (true){
+      if (signal && signal.aborted) return all;
+      if (limit && all.length >= limit) break;
+      let rows;
+      try{ rows = await fetchListPage(market, page, proxyBase); }
+      catch(e){ throw new Error(`종목 목록 수집 실패(${market}, ${page}페이지): ${e.message}`); }
+      if (!rows.length) break; // 더 이상 데이터 없음(목록 끝, 또는 API 스키마 불일치)
+      all.push(...rows);
+      onProgress(all.length);
+      page++;
+      if (page > 80) break; // 안전장치(약 4,000종목 한도)
+      await sleep(150); // 과도한 연속 요청 방지
+    }
+    if (limit && all.length >= limit) break;
+  }
+  return limit ? all.slice(0, limit) : all;
+}
+
+async function scanUniverse(universe, params, proxyBase, concurrency, onProgress, signal){
+  const hits = [];
+  let idx = 0;
+  async function worker(){
+    while (idx < universe.length){
+      if (signal && signal.aborted) return;
+      const item = universe[idx++];
+      try{
+        const raw = await fetchNaver(item.code, proxyBase, { daysBack: 220, requireOwnProxy: true });
+        const computed = computeSignals(raw, params);
+        const last = computed[computed.length-1];
+        if (last.buy || last.sell) hits.push({ code:item.code, name:item.name, last });
+      }catch(e){ /* 개별 종목 실패는 건너뛰고 계속 진행 */ }
+      onProgress(idx, universe.length, hits.length);
+      await sleep(60); // 네이버 서버 부담을 줄이기 위한 최소 간격
+    }
+  }
+  const workers = Array.from({length: Math.max(1, concurrency)}, ()=> worker());
+  await Promise.all(workers);
+  return hits;
+}
+
+function setScanStatus(msg, type){
+  els.scanStatus.textContent = msg;
+  els.scanStatus.className = 'status-line' + (type? ' '+type : '');
+}
+
+function renderScanResultCard(hit){
+  const cls = hit.last.buy ? 'buy' : 'sell';
+  const label = hit.last.buy ? '매수 신호' : '매도 신호';
+  const already = watchlist.includes(hit.code);
+  return `<div class="stock-card ${cls}" data-code="${hit.code}">
+    <div class="topline"><span class="code">${hit.code} · ${hit.name}</span></div>
+    <div class="close mono">${Math.round(hit.last.close).toLocaleString()}</div>
+    <div class="badge ${cls}">${label}</div>
+    <div class="reason">${toDisplayDate(hit.last.date)} 종가 기준</div>
+    <button class="tiny secondary addToWatchBtn" data-code="${hit.code}" data-name="${hit.name}" type="button" style="margin-top:8px;" ${already?'disabled':''}>${already? '이미 등록됨' : '+ 관심종목 추가'}</button>
+  </div>`;
+}
+function wireScanAddButtons(){
+  els.scanResultsGrid.querySelectorAll('.addToWatchBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const code = btn.dataset.code, name = btn.dataset.name;
+      if (watchlist.includes(code)) return;
+      watchlist.push(code);
+      store[code] = { status:'idle', name };
+      renderChips(); renderGrid(); saveWatchlist();
+      btn.textContent = '이미 등록됨';
+      btn.disabled = true;
+      setStatus(`${code}(${name}) 관심종목에 추가됨 — [전체 조회]로 데이터를 가져오세요.`);
+    });
+  });
+}
+
+let scanAbortController = null;
+els.scanStartBtn.addEventListener('click', async ()=>{
+  const proxyBase = document.getElementById('p_proxy').value.trim();
+  if (!proxyBase){ setScanStatus('전종목 스캔에는 본인 전용 프록시 URL이 필요합니다. 위 "기준값 설정"에서 입력해주세요.', 'err'); return; }
+  const marketSel = document.getElementById('scan_market').value;
+  const limitSel = parseInt(document.getElementById('scan_limit').value) || 0;
+  const concurrency = Math.max(1, Math.min(10, parseInt(document.getElementById('scan_concurrency').value) || 5));
+  const markets = marketSel==='both' ? ['KOSPI','KOSDAQ'] : (marketSel==='kospi' ? ['KOSPI'] : ['KOSDAQ']);
+
+  els.scanStartBtn.disabled = true;
+  els.scanStopBtn.style.display = '';
+  els.scanResultsGrid.innerHTML = '';
+  scanAbortController = new AbortController();
+  const signal = scanAbortController.signal;
+
+  try{
+    setScanStatus('대상 종목 목록 수집 중...');
+    const universe = await buildUniverse(markets, limitSel || null, proxyBase,
+      (n)=> setScanStatus(`대상 종목 목록 수집 중... (${n}개 확인)`), signal);
+
+    if (!universe.length){
+      setScanStatus('종목 목록을 가져오지 못했습니다. 프록시 URL/배포 상태를 확인하거나, 네이버 API 스키마 변경 여부를 점검해주세요.', 'err');
+      return;
+    }
+
+    setScanStatus(`총 ${universe.length}개 종목 대상 신호 계산 시작...`);
+    const p = getParams();
+    const hits = await scanUniverse(universe, p, proxyBase, concurrency,
+      (done, total, hitCount)=> setScanStatus(`신호 계산 중... ${done}/${total} (신호 발견 ${hitCount}건)`), signal);
+
+    els.scanResultsGrid.innerHTML = hits.length
+      ? hits.map(renderScanResultCard).join('')
+      : '<div class="empty">신호가 발견된 종목이 없습니다.</div>';
+    wireScanAddButtons();
+
+    if (signal.aborted){
+      setScanStatus(`스캔이 중단되었습니다 — 중단 시점까지 총 ${universe.length}개 중 ${hits.length}건 발견`, 'err');
+    } else {
+      setScanStatus(`스캔 완료 — 총 ${universe.length}개 중 ${hits.length}건 신호 발견`, 'ok');
+    }
+  }catch(e){
+    setScanStatus('스캔 중 오류: ' + e.message, 'err');
+  }finally{
+    els.scanStartBtn.disabled = false;
+    els.scanStopBtn.style.display = 'none';
+  }
+});
+els.scanStopBtn.addEventListener('click', ()=>{
+  if (scanAbortController) scanAbortController.abort();
+});
+
 function selectDetail(code){
   const entry = store[code];
   if (!entry || entry.status!=='done'){ setStatus(`${code}는 아직 데이터가 없습니다. 전체 조회를 먼저 실행해주세요.`, 'err'); return; }
@@ -621,6 +1058,7 @@ function selectDetail(code){
     </tr>`;
   }).join('');
   els.detailPanel.scrollIntoView({behavior:'smooth', block:'nearest'});
+  populateBacktestSelect(); // ③백테스트 탭의 종목 선택을 이 종목으로 맞춰둠(탭은 직접 눌러야 보임)
 }
 
 function renderTicker(){
@@ -641,8 +1079,27 @@ els.codeInput.addEventListener('keydown', (e)=>{ if (e.key==='Enter') addCode();
 els.fetchAllBtn.addEventListener('click', fetchAll);
 els.pasteBtn.addEventListener('click', runPaste);
 
-els.codeInput.value = '446770';
-addCode();
+/* ========================================================================
+   초기화: 저장된 설정 → 저장된 관심종목 순으로 복원, 없으면 기존 기본 동작 유지
+   ======================================================================== */
+function initApp(){
+  loadSettings();
+  const saved = loadWatchlist();
+  if (saved && saved.length){
+    saved.forEach(item=>{
+      if (!/^[0-9A-Za-z]{6}$/.test(item.code)) return;
+      watchlist.push(item.code);
+      store[item.code] = { status:'idle', name: item.name || undefined };
+    });
+    renderChips();
+    renderGrid();
+    setStatus(`저장된 관심종목 ${watchlist.length}개를 불러왔습니다. [전체 조회]를 눌러 최신 데이터를 가져오세요.`);
+  } else {
+    els.codeInput.value = '446770';
+    addCode();
+  }
+}
+initApp();
 </script>
 </body>
 </html>
