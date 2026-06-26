@@ -131,9 +131,9 @@
   </header>
 
   <div class="tabbar" role="tablist">
-    <button type="button" class="active" id="tabBtn1" data-page="1" role="tab" aria-selected="true">① 종목코드 추가 / 종목현황</button>
-    <button type="button" id="tabBtn2" data-page="2" role="tab" aria-selected="false">② 전종목 자동스캔</button>
-    <button type="button" id="tabBtn3" data-page="3" role="tab" aria-selected="false">③ 백테스트</button>
+    <button type="button" class="active" id="tabBtn1" data-page="1" role="tab" aria-selected="true">1. 종목코드 추가 / 종목현황</button>
+    <button type="button" id="tabBtn2" data-page="2" role="tab" aria-selected="false">2. 전종목 자동 스캔</button>
+    <button type="button" id="tabBtn3" data-page="3" role="tab" aria-selected="false">3. 백테스트</button>
   </div>
 
   <div class="page-section active" id="page1">
@@ -178,7 +178,7 @@
         <div class="field"><label>이동평균2 기간(일)</label><input type="text" id="p_ma2" value="120"></div>
         <div class="field" style="grid-column:1/-1;">
           <label>프록시 서버 URL (개별 종목 조회는 선택, 전종목 스캔은 필수)</label>
-          <input type="text" id="p_proxy" style="width:100%;" placeholder="예: https://내워커.workers.dev (Cloudflare Worker — ②전종목 자동스캔 탭에는 반드시 필요합니다)">
+          <input type="text" id="p_proxy" style="width:100%;" placeholder="예: https://내워커.workers.dev (Cloudflare Worker — 2번 전종목 자동 스캔 탭에는 반드시 필요합니다)">
         </div>
       </div>
       <!-- 추가: 설정/관심종목 저장 안내 + 초기화 -->
@@ -224,13 +224,13 @@
   <!-- 전종목 자동 스캔 패널 -->
   <div class="panel" id="scanPanel">
     <h3 style="margin-bottom:4px;font-size:15px;">전종목 자동 스캔 (베타)</h3>
-    <div class="bt-note">코스피·코스닥 시가총액 상위 종목들을 ①탭의 "기준값 설정"에 등록된 조건으로 일괄 검사해 매수·매도 신호가 발생한 종목만 찾아줍니다. 네이버금융 비공식 API에 대량 요청을 보내는 기능이라 <b>본인 전용 프록시(Cloudflare Worker) URL이 반드시 필요</b>하며, 범위가 클수록 오래 걸립니다.</div>
+    <div class="bt-note">코스피·코스닥 시가총액 상위 종목들을 1번 탭의 "기준값 설정"에 등록된 조건으로 일괄 검사해 매수·매도 신호가 발생한 종목만 찾아줍니다. 네이버금융 비공식 API에 대량 요청을 보내는 기능이라 <b>본인 전용 프록시(Cloudflare Worker) URL이 반드시 필요</b>하며, 범위가 클수록 오래 걸립니다.</div>
     <div class="controls" style="margin:14px 0;">
       <div class="field"><label>시장</label>
         <select id="scan_market">
           <option value="both" selected>코스피+코스닥</option>
-          <option value="kospi">코스피만</option>
-          <option value="kosdaq">코스닥만</option>
+          <option value="kospi">코스피</option>
+          <option value="kosdaq">코스닥</option>
         </select>
       </div>
       <div class="field"><label>스캔 범위(시가총액 상위)</label>
@@ -255,7 +255,7 @@
   <!-- 백테스트 패널 -->
   <div class="panel" id="backtestPanel">
     <h3 style="margin-bottom:4px;font-size:15px;">백테스트 — 신호 발생 후 N거래일 수익률</h3>
-    <div class="bt-note">①탭에서 조회한 종목 중 하나를 선택하면, 그 종목의 전체 조회 기간(최대 약 240거래일) 동안 발생한 매수·매도 신호 각각에 대해 신호 발생일 종가 → N거래일 후 종가의 변화율을 계산합니다. 매도신호는 "신호 후 가격이 실제로 하락했는지"를 승률 기준으로 봅니다.</div>
+    <div class="bt-note">1번 탭에서 조회한 종목 중 하나를 선택하면, 그 종목의 전체 조회 기간(최대 약 240거래일) 동안 발생한 매수·매도 신호 각각에 대해 신호 발생일 종가 → N거래일 후 종가의 변화율을 계산합니다. 매도신호는 "신호 후 가격이 실제로 하락했는지"를 승률 기준으로 봅니다.</div>
     <div class="controls" style="margin:14px 0;">
       <div class="field"><label>백테스트할 종목</label>
         <select id="bt_code_select" style="width:220px;"></select>
@@ -813,9 +813,9 @@ function populateBacktestSelect(){
   const doneList = watchlist.filter(c => store[c] && store[c].status === 'done');
   const prevVal = els.btCodeSelect.value;
   if (doneList.length === 0){
-    els.btCodeSelect.innerHTML = '<option value="">조회된 종목 없음 — ①탭에서 먼저 전체 조회</option>';
+    els.btCodeSelect.innerHTML = '<option value="">조회된 종목 없음 — 1번 탭에서 먼저 전체 조회</option>';
     els.backtestSummary.innerHTML = '';
-    els.backtestBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px 0;">①탭에서 종목을 추가하고 [전체 조회]를 실행한 뒤 다시 와주세요.</td></tr>`;
+    els.backtestBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px 0;">1번 탭에서 종목을 추가하고 [전체 조회]를 실행한 뒤 다시 와주세요.</td></tr>`;
     return;
   }
   els.btCodeSelect.innerHTML = doneList.map(c=>{
@@ -1058,7 +1058,7 @@ function selectDetail(code){
     </tr>`;
   }).join('');
   els.detailPanel.scrollIntoView({behavior:'smooth', block:'nearest'});
-  populateBacktestSelect(); // ③백테스트 탭의 종목 선택을 이 종목으로 맞춰둠(탭은 직접 눌러야 보임)
+  populateBacktestSelect(); // 3번 백테스트 탭의 종목 선택을 이 종목으로 맞춰둠(탭은 직접 눌러야 보임)
 }
 
 function renderTicker(){
