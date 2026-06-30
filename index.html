@@ -136,6 +136,16 @@
   .corr-cell{border-radius:6px;display:inline-block;min-width:48px;padding:3px 0;font-weight:600;}
   .wf-compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
   @media (max-width:560px){.wf-compare-grid{grid-template-columns:1fr;}}
+
+  /* 신규: 거시지표(환율) 배너 */
+  .fx-banner{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;}
+  .fx-banner.warn{border-color:var(--amber);background:rgba(242,184,75,.08);}
+  .fx-banner.calm{border-color:var(--line);background:var(--panel-2);}
+  .fx-banner .fx-val{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;}
+  .fx-banner .fx-tag{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;}
+  .fx-banner .fx-tag.up{background:rgba(255,84,112,.16);color:var(--sell);}
+  .fx-banner .fx-tag.down{background:rgba(43,213,118,.16);color:var(--buy);}
+  .fx-banner .fx-tag.flat{background:rgba(124,138,165,.16);color:var(--muted);}
 </style>
 </head>
 <body>
@@ -158,6 +168,7 @@
   </div>
 
   <div class="page-section active" id="page1">
+  <div class="fx-banner calm" id="fxBanner" style="display:none;"></div>
   <div class="panel">
     <div class="controls">
       <div class="field">
@@ -231,6 +242,21 @@
 
         <div class="settings-sub">④ 백테스트 구간분할(Walk-Forward)</div>
         <div class="field"><label>앞구간 비율(%)</label><input type="text" id="p_wfsplit" value="70"></div>
+
+        <div class="settings-sub">⑤ 거시지표 — 원/달러 환율</div>
+        <div class="field"><label>환율 반영 사용</label>
+          <select id="p_fxon"><option value="off" selected>미사용</option><option value="on">사용</option></select>
+        </div>
+        <div class="field"><label>환율 이동평균 기간(일)</label><input type="text" id="p_fxma" value="20"></div>
+        <div class="field"><label>환율 경고 이격도 기준(%)</label><input type="text" id="p_fxalertpct" value="1.5"></div>
+        <div class="field"><label>환율 가중치 적용</label>
+          <select id="p_fxweighton"><option value="off" selected>미사용(경고표시만)</option><option value="on">사용(수출주 비중 보정)</option></select>
+        </div>
+        <div class="field"><label>환율 가중치 배수(원화 약세시 수출주 매수)</label><input type="text" id="p_fxexportmult" value="1.3"></div>
+        <div class="field" style="grid-column:1/-1;">
+          <label>수출 민감 종목코드 (콤마 구분 — 원화 약세시 비중 상향 적용 대상)</label>
+          <input type="text" id="p_fxexportcodes" style="width:100%;" placeholder="예: 005930, 000660, 005380">
+        </div>
       </div>
       <div style="margin-top:10px;">
         <span style="font-size:11.5px;color:var(--muted);">설정값과 관심종목은 이 브라우저에 자동 저장됩니다. </span>
@@ -352,8 +378,8 @@
   <div class="panel">
     <h3 style="margin-bottom:4px;font-size:15px;">포지션 사이징 / 리스크관리</h3>
     <div class="bt-note">
-      각 종목의 최근 매수신호 기준으로, ATR(평균진폭) 기반 손절가와 "1회 허용손실율"에 맞는 추천 수량을 계산합니다. 캔들 신호(우선)와 추세 신호(차순위)는 "기준값 설정 ③"에 설정한 비중배수가 다르게 적용됩니다 — 신뢰도가 낮은 추세신호는 기본적으로 절반 비중만 베팅하도록 설계되어 있습니다.
-      <br>리스크금액 = 총투자금 × 1회허용손실율 × 신호비중배수, 추천수량 = 리스크금액 ÷ (진입가-손절가)
+      각 종목의 최근 매수신호 기준으로, ATR(평균진폭) 기반 손절가와 "1회 허용손실율"에 맞는 추천 수량을 계산합니다. 캔들 신호(우선)와 추세 신호(차순위)는 "기준값 설정 ③"에 설정한 비중배수가 다르게 적용됩니다 — 신뢰도가 낮은 추세신호는 기본적으로 절반 비중만 베팅하도록 설계되어 있습니다. 환율 가중치를 "사용"으로 설정하면, 원화 약세 구간에서 등록한 수출 민감 종목의 비중이 추가로 보정됩니다.
+      <br>리스크금액 = 총투자금 × 1회허용손실율 × 신호비중배수 × 환율가중치, 추천수량 = 리스크금액 ÷ (진입가-손절가)
     </div>
     <button class="secondary" id="refreshRiskBtn" type="button" style="margin-top:10px;">리스크 테이블 새로고침</button>
     <div class="table-scroll" style="margin-top:14px;">
@@ -389,7 +415,7 @@
     실시간 조회는 공개 CORS 프록시를 거쳐 네이버금융 일별시세를 가져오며, 사내망·브라우저 정책에 따라 차단될 수 있습니다 — 그 경우 위 "기준값 설정"을 펼쳐 데이터를 직접 붙여넣거나, 직접 배포한 프록시 서버 URL을 입력해주세요.<br>
     관심종목 목록과 기준값 설정은 이 브라우저(localStorage)에 저장되어 새로고침 후에도 유지됩니다. 다른 기기·브라우저에는 동기화되지 않으며, 서버로 전송되지 않습니다.<br>
     전종목 스캔은 네이버금융의 비공식 API를 대량으로 호출하는 기능으로, 해당 API의 구조가 바뀌면 동작하지 않을 수 있으며 과도한 사용은 차단으로 이어질 수 있습니다.<br>
-    주봉추세필터·블랙아웃·ATR손절·상관관계·워크포워드는 모두 과거 가격 데이터에 기반한 기계적 보조 지표이며 투자 자문이 아닙니다. 최종 투자 판단과 책임은 본인에게 있습니다.
+    주봉추세필터·블랙아웃·ATR손절·상관관계·워크포워드·환율가중치는 모두 과거 가격 데이터에 기반한 기계적 보조 지표이며 투자 자문이 아닙니다. 최종 투자 판단과 책임은 본인에게 있습니다.
   </footer>
 </div>
 
@@ -438,11 +464,13 @@ const els = {
   corrTable: document.getElementById('corrTable'),
   corrStatus: document.getElementById('corrStatus'),
   refreshCorrBtn: document.getElementById('refreshCorrBtn'),
+  fxBanner: document.getElementById('fxBanner'),
 };
 
 let watchlist = [];
 const store = {};
 let selectedCode = null;
+let fxState = null; // { rows, last, ma, deviationPct, trend, alert }
 
 els.settingsBtn.addEventListener('click', () => { els.settingsDetails.open = !els.settingsDetails.open; });
 
@@ -475,6 +503,13 @@ function getParams(){
     riskPct: parseFloat(document.getElementById('p_riskpct').value) || 1,
     // 신규: 워크포워드
     wfSplit: Math.min(90, Math.max(10, parseInt(document.getElementById('p_wfsplit').value) || 70)),
+    // 신규: 거시지표(환율)
+    fxOn: document.getElementById('p_fxon').value === 'on',
+    fxMaPeriod: parseInt(document.getElementById('p_fxma').value) || 20,
+    fxAlertPct: parseFloat(document.getElementById('p_fxalertpct').value) || 1.5,
+    fxWeightOn: document.getElementById('p_fxweighton').value === 'on',
+    fxExportMult: parseFloat(document.getElementById('p_fxexportmult').value) || 1.3,
+    fxExportCodes: (document.getElementById('p_fxexportcodes').value || '').split(',').map(s=>s.trim().toUpperCase()).filter(Boolean),
   };
 }
 
@@ -576,6 +611,65 @@ async function fetchNaver(code, ownProxyBase, opts){
   throw lastErr || new Error('알 수 없는 오류');
 }
 
+/* ========================================================================
+   신규 E) 거시지표 — 원/달러 환율(USD/KRW) 조회 및 분석
+   네이버금융 siseJson 엔드포인트는 FX_USDKRW 심볼로도 동일한 형식의
+   일별 시세(OHLC)를 제공하므로 fetchNaver()를 그대로 재사용한다.
+   ======================================================================== */
+async function fetchFxUsdKrw(ownProxyBase){
+  return await fetchNaver('FX_USDKRW', ownProxyBase, { daysBack: 240 });
+}
+
+function computeFxState(rows, p){
+  if (!rows || rows.length < 5) return null;
+  const n = rows.length;
+  const closes = rows.map(r=>r.close);
+  const maN = Math.min(p.fxMaPeriod, n);
+  const ma = avg(closes.slice(n-maN));
+  const last = rows[n-1];
+  const prev = rows[n-2] || last;
+  const deviationPct = ma ? ((last.close - ma) / ma) * 100 : 0;
+  const dayChangePct = prev.close ? ((last.close - prev.close) / prev.close) * 100 : 0;
+  const trend = deviationPct > 0.1 ? 'up' /* 원화 약세(환율 상승) */ : (deviationPct < -0.1 ? 'down' /* 원화 강세 */ : 'flat');
+  const alert = Math.abs(deviationPct) >= p.fxAlertPct;
+  return { rows, last, ma, deviationPct, dayChangePct, trend, alert };
+}
+
+function renderFxBanner(p){
+  if (!p.fxOn || !fxState){
+    els.fxBanner.style.display = 'none';
+    return;
+  }
+  const f = fxState;
+  els.fxBanner.style.display = '';
+  els.fxBanner.className = 'fx-banner ' + (f.alert ? 'warn' : 'calm');
+  const tagCls = f.trend === 'up' ? 'up' : (f.trend === 'down' ? 'down' : 'flat');
+  const tagLabel = f.trend === 'up' ? '원화 약세(환율↑)' : (f.trend === 'down' ? '원화 강세(환율↓)' : '횡보');
+  const alertTxt = f.alert ? ` <span style="color:var(--amber);font-weight:600;">⚠ 거시 변동성 경고 — ${p.fxMaPeriod}일 이평 대비 이격도 ${p.fxAlertPct}% 이상</span>` : '';
+  els.fxBanner.innerHTML = `
+    <span style="color:var(--muted);">원/달러 환율</span>
+    <span class="fx-val">${Math.round(f.last.close).toLocaleString()}원</span>
+    <span class="fx-tag ${tagCls}">${tagLabel}</span>
+    <span style="color:var(--muted);">${p.fxMaPeriod}일 이평 대비 ${f.deviationPct>=0?'+':''}${f.deviationPct.toFixed(2)}%</span>
+    <span style="color:var(--muted);">전일 대비 ${f.dayChangePct>=0?'+':''}${f.dayChangePct.toFixed(2)}%</span>
+    ${alertTxt}
+  `;
+}
+
+async function refreshFx(){
+  const p = getParams();
+  if (!p.fxOn){ fxState = null; renderFxBanner(p); return; }
+  const ownProxy = document.getElementById('p_proxy').value.trim();
+  try{
+    const raw = await fetchFxUsdKrw(ownProxy);
+    fxState = computeFxState(raw, p);
+  }catch(e){
+    fxState = null;
+    setStatus(`환율 데이터 조회 실패(거시지표 미반영) — ${e.message}`, 'err');
+  }
+  renderFxBanner(p);
+}
+
 function avg(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length; }
 
 function computeSignals(rows, p){
@@ -655,10 +749,11 @@ function computeSignals(rows, p){
 }
 
 /* ========================================================================
-   신규 A) enrichSignals — ATR / 주봉추세(다중 시간프레임) / 블랙아웃 / 사이징
-   computeSignals()가 끝난 뒤 한 번 더 돌면서 4개 항목을 부착한다.
+   신규 A) enrichSignals — ATR / 주봉추세(다중 시간프레임) / 블랙아웃 / 사이징 / 환율가중치
+   computeSignals()가 끝난 뒤 한 번 더 돌면서 항목들을 부착한다.
+   code, fxCtx 인자를 추가로 받아 환율 가중치를 사이징에 반영한다.
    ======================================================================== */
-function enrichSignals(rows, p){
+function enrichSignals(rows, p, code, fxCtx){
   // --- ATR(평균진폭) : TR의 단순이동평균 ---
   for (let i=0;i<rows.length;i++){
     const r = rows[i];
@@ -688,6 +783,11 @@ function enrichSignals(rows, p){
     }
   }
 
+  // 환율 가중치 적용 여부(이 종목이 수출 민감 종목 목록에 있고, 가중치 사용 설정이며, 환율 데이터가 있을 때만)
+  const isExportSensitive = !!(code && p.fxExportCodes.includes(code));
+  const applyFxWeight = !!(p.fxOn && p.fxWeightOn && fxCtx && isExportSensitive);
+  const fxMultValue = applyFxWeight && fxCtx.trend === 'up' ? p.fxExportMult : 1.0; // 원화 약세일 때만 가중
+
   // --- 추세정합 판정 + 블랙아웃 + (필터 적용) + 사이징 ---
   for (let i=0;i<rows.length;i++){
     const r = rows[i];
@@ -707,9 +807,11 @@ function enrichSignals(rows, p){
       if (r.sell){ r.sell = false; r.filteredOut = true; }
     }
 
-    // 포지션 사이징(매수신호 기준)
+    r.fxWeighted = applyFxWeight; // 이 종목이 환율 가중치 적용 대상인지 표시(테이블/카드용)
+
+    // 포지션 사이징(매수신호 기준) — 환율가중치(fxMultValue)를 추가로 곱함
     if (r.buy && r.atr != null){
-      const tierMult = r.tier === 'candle' ? p.tierCandle : (r.tier === 'trend' ? p.tierTrend : 1.0);
+      const tierMult = (r.tier === 'candle' ? p.tierCandle : (r.tier === 'trend' ? p.tierTrend : 1.0)) * fxMultValue;
       const stopPrice = r.close - r.atr * p.atrMult;
       const riskPerShare = Math.max(r.close - stopPrice, 1);
       const riskAmount = p.capital * (p.riskPct/100) * tierMult;
@@ -717,6 +819,7 @@ function enrichSignals(rows, p){
         stopPrice, riskPerShare, tierMult, riskAmount,
         suggestedQty: Math.floor(riskAmount / riskPerShare),
         stopPct: (riskPerShare / r.close) * 100,
+        fxMultApplied: fxMultValue !== 1.0,
       };
     } else {
       r.sizing = null;
@@ -736,6 +839,7 @@ const SETTING_IDS = [
   'p_blackout','p_blackoutwindow',
   'p_atrperiod','p_atrmult','p_tiercandle','p_tiertrend','p_capital','p_riskpct',
   'p_wfsplit',
+  'p_fxon','p_fxma','p_fxalertpct','p_fxweighton','p_fxexportmult','p_fxexportcodes',
 ];
 
 function saveWatchlist(){
@@ -847,6 +951,7 @@ async function fetchAll(){
   els.fetchAllBtn.disabled = true;
   const ownProxy = document.getElementById('p_proxy').value.trim();
   const p = getParams();
+  await refreshFx(); // 거시지표(환율)를 먼저 한 번 갱신해두고, 이후 각 종목 사이징에 반영
   let okCount = 0, errCount = 0;
   for (const code of watchlist){
     store[code] = { ...store[code], status:'loading' };
@@ -855,7 +960,7 @@ async function fetchAll(){
     try{
       const raw = await fetchNaver(code, ownProxy);
       const computed = computeSignals(raw, p);
-      enrichSignals(computed, p);
+      enrichSignals(computed, p, code, fxState);
       const display = filterDisplay(computed, els.period.value);
       store[code] = { ...store[code], status:'done', computed, display };
       okCount++;
@@ -877,7 +982,7 @@ function runPaste(){
   if (raw.length < 5){ setStatus('붙여넣은 데이터에서 유효한 행을 찾지 못했습니다. 형식을 확인해주세요.', 'err'); return; }
   const p = getParams();
   const computed = computeSignals(raw, p);
-  enrichSignals(computed, p);
+  enrichSignals(computed, p, code, fxState);
   const display = filterDisplay(computed, els.period.value);
   store[code] = { ...store[code], status:'done', display: display.length?display:computed.slice(-60), computed };
   renderGrid();
@@ -902,6 +1007,7 @@ function badgeInfo(entry){
   if (last.trendAligned===true) flags.push({cls:'ok', label:'주봉 추세 정합'});
   if (last.trendAligned===false) flags.push({cls:'bad', label:'⚠ 주봉 역행'});
   if (last.filteredOut) flags.push({cls:'warn', label:'필터로 무력화됨'});
+  if (last.fxWeighted) flags.push({cls:'ok', label:'환율 가중치 적용'});
   if (last.buy){
     const reasons = [last.buy1&&'돌파형', last.buy2&&'투매반등형', last.buy3&&'추세상승형', last.buy4&&'골든크로스'].filter(Boolean).join(' · ');
     return {cls:'buy', label:'매수 우선'+(last.conflict?' (매도신호 동시발생)':''), reason: reasons + conflictTag + ' · ' + toDisplayDate(last.date), flags};
@@ -1230,7 +1336,7 @@ function renderWalkForward(entry, hold){
 }
 
 /* ========================================================================
-   신규 C) 리스크관리 탭 — 최근 매수신호 기준 ATR 손절 + 추천 수량
+   신규 C) 리스크관리 탭 — 최근 매수신호 기준 ATR 손절 + 추천 수량 (환율가중치 반영)
    ======================================================================== */
 function renderRiskTable(){
   const p = getParams();
@@ -1249,7 +1355,7 @@ function renderRiskTable(){
       return `<tr><td>${nm}</td><td colspan="11" style="text-align:center;color:var(--muted);">최근 매수신호 없음</td></tr>`;
     }
     const s = lastSignalRow.sizing;
-    const tierLabel = lastSignalRow.tier==='candle' ? '캔들(우선)' : (lastSignalRow.tier==='trend' ? '추세(차순위)' : lastSignalRow.tier);
+    const tierLabel = (lastSignalRow.tier==='candle' ? '캔들(우선)' : (lastSignalRow.tier==='trend' ? '추세(차순위)' : lastSignalRow.tier)) + (s.fxMultApplied ? ' · 환율가중' : '');
     return `<tr>
       <td>${nm}</td>
       <td><span class="pill buy">매수</span></td>
@@ -1412,7 +1518,7 @@ async function scanUniverse(universe, params, proxyBase, concurrency, onProgress
       try{
         const raw = await fetchNaver(item.code, proxyBase, { daysBack: 220, requireOwnProxy: true });
         const computed = computeSignals(raw, params);
-        enrichSignals(computed, params);
+        enrichSignals(computed, params, item.code, fxState);
         const last = computed[computed.length-1];
         if (last.buy || last.sell) hits.push({ code:item.code, name:item.name, last });
       }catch(e){ }
@@ -1473,6 +1579,7 @@ els.scanStartBtn.addEventListener('click', async ()=>{
   const signal = scanAbortController.signal;
 
   try{
+    await refreshFx();
     setScanStatus('대상 종목 목록 수집 중...');
     const universe = await buildUniverse(markets, limitSel || null, proxyBase,
       (n)=> setScanStatus(`대상 종목 목록 수집 중... (${n}개 확인)`), signal);
